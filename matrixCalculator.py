@@ -15,11 +15,22 @@ def fetch_train_data(model: str, api_date: str) -> dict:
         "model": model,
         "departure_date_time": api_date
     }
-    headers = {'Content-Type': 'application/json'}
+    headers = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Origin': 'https://eticket.railway.gov.bd',
+        'Referer': 'https://eticket.railway.gov.bd/'
+    }
 
-    response = requests.post(url, json=payload, headers=headers)
-    response.raise_for_status()
-    return response.json().get("data")
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response.raise_for_status()
+        return response.json().get("data")
+    except requests.RequestException as e:
+        print(f"Error fetching train data: {str(e)}")
+        return None
 
 def get_seat_availability(train_model: str, journey_date: str, from_city: str, to_city: str) -> tuple:
     url = "https://railspaapi.shohoz.com/v1.0/web/bookings/search-trips-v2"
@@ -29,9 +40,16 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
         "date_of_journey": journey_date,
         "seat_class": "SHULOV"
     }
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Origin': 'https://eticket.railway.gov.bd',
+        'Referer': 'https://eticket.railway.gov.bd/'
+    }
 
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, headers=headers, timeout=30)
         response.raise_for_status()
         trains = response.json().get("data", {}).get("trains", [])
 
@@ -55,7 +73,8 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
 
         return (from_city, to_city, None)
 
-    except requests.RequestException:
+    except requests.RequestException as e:
+        print(f"Error getting seat availability: {str(e)}")
         return (from_city, to_city, None)
 
 def compute_matrix(train_model, journey_date_str, api_date_format):
