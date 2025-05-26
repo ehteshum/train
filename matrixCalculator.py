@@ -8,6 +8,9 @@ import time
 import random
 import logging
 import os
+from functools import lru_cache
+from queue import Queue
+import threading
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -16,6 +19,11 @@ logger = logging.getLogger(__name__)
 SEAT_TYPES = [
     "S_CHAIR", "SHOVAN", "SNIGDHA", "F_SEAT", "F_CHAIR", "AC_S", "F_BERTH", "AC_B", "SHULOV", "AC_CHAIR"
 ]
+
+# Create request queue
+request_queue = Queue()
+result_cache = {}
+cache_lock = threading.Lock()
 
 # Create a session for persistent connections
 session = requests.Session()
@@ -39,14 +47,43 @@ session.headers.update({
     'Pragma': 'no-cache'
 })
 
+def get_cache_key(method, url, **kwargs):
+    """Generate a cache key for the request"""
+    key_parts = [method, url]
+    if 'json' in kwargs:
+        key_parts.append(json.dumps(kwargs['json'], sort_keys=True))
+    if 'params' in kwargs:
+        key_parts.append(json.dumps(kwargs['params'], sort_keys=True))
+    return '|'.join(key_parts)
+
+@lru_cache(maxsize=100)
+def get_cached_response(cache_key):
+    """Get cached response if available"""
+    with cache_lock:
+        return result_cache.get(cache_key)
+
+def set_cached_response(cache_key, response_data, ttl=300):
+    """Cache response with TTL"""
+    with cache_lock:
+        result_cache[cache_key] = {
+            'data': response_data,
+            'expires': time.time() + ttl
+        }
+
 def make_request(method, url, **kwargs):
-    """Make a request with retry logic and proxy support"""
-    max_retries = 5  # Increased retries
-    base_delay = 3   # Increased base delay
+    """Make a request with queue, retry logic, and caching"""
+    cache_key = get_cache_key(method, url, **kwargs)
+    cached = get_cached_response(cache_key)
+    
+    if cached and cached['expires'] > time.time():
+        logger.info("Returning cached response")
+        return cached['data']
+    
+    max_retries = 5
+    base_delay = 3
     
     for attempt in range(max_retries):
         try:
-            # Add random delay between attempts
             if attempt > 0:
                 delay = base_delay * (2 ** attempt) + random.uniform(1, 3)
                 logger.info(f"Waiting {delay:.2f} seconds before retry {attempt + 1}")
@@ -55,13 +92,14 @@ def make_request(method, url, **kwargs):
             logger.info(f"Making {method} request to {url} (attempt {attempt + 1}/{max_retries})")
             response = session.request(method, url, **kwargs)
             
-            # Handle rate limiting
             if response.status_code == 429:
                 logger.warning("Rate limited, waiting longer...")
-                time.sleep(10)  # Wait longer for rate limits
+                time.sleep(10)
                 continue
                 
             if response.status_code == 200:
+                response_data = response.json()
+                set_cached_response(cache_key, response_data)
                 return response
                 
             logger.warning(f"Request failed with status {response.status_code}")
@@ -85,15 +123,13 @@ def fetch_train_data(model: str, api_date: str) -> dict:
     
     try:
         logger.info(f"Fetching train data for model: {model}, date: {api_date}")
-        response = make_request('POST', url, json=payload, timeout=60)  # Increased timeout
+        response = make_request('POST', url, json=payload, timeout=60)
         
         if not response:
             logger.error("Failed to get response after retries")
             return None
             
         logger.info(f"Response status code: {response.status_code}")
-        logger.info(f"Response headers: {dict(response.headers)}")
-        
         data = response.json()
         logger.info(f"Response data keys: {data.keys() if isinstance(data, dict) else 'Not a dict'}")
         
@@ -114,15 +150,13 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
     
     try:
         logger.info(f"Getting seat availability for train: {train_model}, from: {from_city}, to: {to_city}, date: {journey_date}")
-        response = make_request('GET', url, params=params, timeout=60)  # Increased timeout
+        response = make_request('GET', url, params=params, timeout=60)
         
         if not response:
             logger.error("Failed to get response after retries")
             return (from_city, to_city, None)
             
         logger.info(f"Response status code: {response.status_code}")
-        logger.info(f"Response headers: {dict(response.headers)}")
-        
         data = response.json()
         logger.info(f"Response data keys: {data.keys() if isinstance(data, dict) else 'Not a dict'}")
         
