@@ -7,6 +7,7 @@ import pytz
 import time
 import random
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,13 +19,52 @@ SEAT_TYPES = [
 
 # Create a session for persistent connections
 session = requests.Session()
+
+# Try to get proxy from environment variable, otherwise use direct connection
+PROXY = os.getenv('HTTP_PROXY') or os.getenv('HTTPS_PROXY')
+if PROXY:
+    session.proxies = {
+        'http': PROXY,
+        'https': PROXY
+    }
+    logger.info(f"Using proxy: {PROXY}")
+
 session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'application/json',
     'Accept-Language': 'en-US,en;q=0.9',
     'Origin': 'https://eticket.railway.gov.bd',
-    'Referer': 'https://eticket.railway.gov.bd/'
+    'Referer': 'https://eticket.railway.gov.bd/',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache'
 })
+
+def make_request(method, url, **kwargs):
+    """Make a request with retry logic and proxy support"""
+    max_retries = 3
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Making {method} request to {url} (attempt {attempt + 1}/{max_retries})")
+            response = session.request(method, url, **kwargs)
+            
+            if response.status_code == 200:
+                return response
+                
+            logger.warning(f"Request failed with status {response.status_code}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed: {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+            raise
+            
+    return None
 
 def fetch_train_data(model: str, api_date: str) -> dict:
     url = "https://railspaapi.shohoz.com/v1.0/web/train-routes"
@@ -35,36 +75,22 @@ def fetch_train_data(model: str, api_date: str) -> dict:
     
     try:
         logger.info(f"Fetching train data for model: {model}, date: {api_date}")
-        response = session.post(
-            url,
-            json=payload,
-            timeout=30
-        )
+        response = make_request('POST', url, json=payload, timeout=30)
         
+        if not response:
+            logger.error("Failed to get response after retries")
+            return None
+            
         logger.info(f"Response status code: {response.status_code}")
         logger.info(f"Response headers: {dict(response.headers)}")
         
-        if response.status_code != 200:
-            logger.error(f"Error response: {response.text}")
-            return None
-            
         data = response.json()
         logger.info(f"Response data keys: {data.keys() if isinstance(data, dict) else 'Not a dict'}")
         
         return data.get("data")
         
-    except requests.exceptions.Timeout:
-        logger.error("Request timed out")
-        return None
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request failed: {str(e)}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON response: {str(e)}")
-        logger.error(f"Response content: {response.text}")
-        return None
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
+        logger.error(f"Error in fetch_train_data: {str(e)}")
         return None
 
 def get_seat_availability(train_model: str, journey_date: str, from_city: str, to_city: str) -> tuple:
@@ -78,19 +104,15 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
     
     try:
         logger.info(f"Getting seat availability for train: {train_model}, from: {from_city}, to: {to_city}, date: {journey_date}")
-        response = session.get(
-            url,
-            params=params,
-            timeout=30
-        )
+        response = make_request('GET', url, params=params, timeout=30)
         
+        if not response:
+            logger.error("Failed to get response after retries")
+            return (from_city, to_city, None)
+            
         logger.info(f"Response status code: {response.status_code}")
         logger.info(f"Response headers: {dict(response.headers)}")
         
-        if response.status_code != 200:
-            logger.error(f"Error response: {response.text}")
-            return (from_city, to_city, None)
-            
         data = response.json()
         logger.info(f"Response data keys: {data.keys() if isinstance(data, dict) else 'Not a dict'}")
         
@@ -119,18 +141,8 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
         logger.info(f"No matching train found for model {train_model}")
         return (from_city, to_city, None)
         
-    except requests.exceptions.Timeout:
-        logger.error("Request timed out")
-        return (from_city, to_city, None)
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request failed: {str(e)}")
-        return (from_city, to_city, None)
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON response: {str(e)}")
-        logger.error(f"Response content: {response.text}")
-        return (from_city, to_city, None)
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
+        logger.error(f"Error in get_seat_availability: {str(e)}")
         return (from_city, to_city, None)
 
 def compute_matrix(train_model, journey_date_str, api_date_format):

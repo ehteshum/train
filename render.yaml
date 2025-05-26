@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: bd-train
+    name: bangladesh-railway-train-seat-matrix
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --timeout 120 --workers 2
@@ -16,4 +16,8 @@ services:
       - key: GUNICORN_TIMEOUT
         value: "120"
       - key: GUNICORN_WORKERS
-        value: "2" 
+        value: "2"
+      - key: HTTP_PROXY
+        value: "http://proxy.render.com:3128"
+      - key: HTTPS_PROXY
+        value: "http://proxy.render.com:3128" 
