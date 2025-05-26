@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import pytz
 import time
+import random
 
 SEAT_TYPES = [
     "S_CHAIR", "SHOVAN", "SNIGDHA", "F_SEAT", "F_CHAIR", "AC_S", "F_BERTH", "AC_B", "SHULOV", "AC_CHAIR"
@@ -35,28 +36,40 @@ def fetch_train_data(model: str, api_date: str) -> dict:
     }
     
     try:
-        # Add retry logic
-        max_retries = 3
-        retry_delay = 2  # seconds
+        # Add retry logic with exponential backoff
+        max_retries = 5
+        base_delay = 1  # seconds
         
         for attempt in range(max_retries):
             try:
+                # Add a small random delay between retries
+                if attempt > 0:
+                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                    time.sleep(delay)
+                
                 response = session.post(
                     url,
                     json=payload,
                     timeout=30,
                     verify=True
                 )
+                
+                # Check for rate limiting
+                if response.status_code == 429:
+                    print(f"Rate limited, waiting before retry...")
+                    time.sleep(5)  # Wait longer for rate limits
+                    continue
+                
                 response.raise_for_status()
                 data = response.json().get("data")
                 if data:
                     return data
-                time.sleep(retry_delay)
+                
             except requests.RequestException as e:
                 print(f"Attempt {attempt + 1} failed: {str(e)}")
                 if attempt == max_retries - 1:
                     raise
-                time.sleep(retry_delay)
+                continue
         
         return None
     except Exception as e:
@@ -73,18 +86,30 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
     }
     
     try:
-        # Add retry logic
-        max_retries = 3
-        retry_delay = 2  # seconds
+        # Add retry logic with exponential backoff
+        max_retries = 5
+        base_delay = 1  # seconds
         
         for attempt in range(max_retries):
             try:
+                # Add a small random delay between retries
+                if attempt > 0:
+                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                    time.sleep(delay)
+                
                 response = session.get(
                     url,
                     params=params,
                     timeout=30,
                     verify=True
                 )
+                
+                # Check for rate limiting
+                if response.status_code == 429:
+                    print(f"Rate limited, waiting before retry...")
+                    time.sleep(5)  # Wait longer for rate limits
+                    continue
+                
                 response.raise_for_status()
                 trains = response.json().get("data", {}).get("trains", [])
                 
@@ -107,11 +132,12 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
                         return (from_city, to_city, seat_info)
                 
                 return (from_city, to_city, None)
+                
             except requests.RequestException as e:
                 print(f"Attempt {attempt + 1} failed: {str(e)}")
                 if attempt == max_retries - 1:
                     raise
-                time.sleep(retry_delay)
+                continue
         
         return (from_city, to_city, None)
     except Exception as e:
