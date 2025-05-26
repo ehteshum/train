@@ -3903,3 +3903,47 @@ details[open] .route-body {
         padding: 8px 15px;
     }
 }
+
+.attribution {
+    text-align: center;
+    color: #666;
+    font-size: 1.1em;
+    margin-top: -10px;
+    margin-bottom: 20px;
+    font-style: italic;
+    font-weight: bold;
+}
+
+.contact-link {
+    text-align: center;
+    margin-top: -10px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: #666;
+}
+
+.contact-link strong {
+    color: #006747;
+    font-weight: 700;
+}
+
+.contact-link a {
+    color: #006747;
+    text-decoration: none;
+    transition: transform 0.3s ease;
+    display: inline-block;
+    margin-left: 5px;
+}
+
+.contact-link a:hover {
+    transform: scale(1.1);
+}
+
+.contact-link i {
+    margin-right: 5px;
+}
+
+.contact-link .fa-facebook {
+    color: #1877f2;
+    font-size: 16px;
+}

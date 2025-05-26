@@ -5,7 +5,7 @@ from matrixCalculator import compute_matrix
 from request_queue import RequestQueue
 
 app = Flask(__name__)
-app.secret_key = "super_secret_key"
+app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_key')
 
 RESULT_CACHE = {}
 
@@ -334,4 +334,7 @@ def page_not_found(e):
     return render_template('404.html', styles_css=STYLES_CSS_CONTENT, script_js=SCRIPT_JS_CONTENT), 404
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), debug=True)
+else:
+    # For Vercel deployment
+    app = app

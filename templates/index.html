@@ -5,7 +5,7 @@
 
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Home | Train Seat Matrix</title>
+    <title>Home | BD Train</title>
     <!-- SEO Meta Tags -->
     <meta name="description"
         content="View segmented seat availability and fare matrix for Bangladesh Railway trains. Quickly check available seats by route and class.">
@@ -14,7 +14,7 @@
     <meta name="author" content="Nishat Mahmud">
     <meta name="publish_date" content="2025-05-13" scheme="YYYY-MM-DD">
     <!-- Open Graph Meta Tags -->
-    <meta property="og:title" content="Train Seat Matrix with Segmentation for Bangladesh Railway">
+    <meta property="og:title" content="BD Train with Segmentation for Bangladesh Railway">
     <meta property="og:description"
         content="Easily check segmented seat availability and fare matrix for Bangladesh Railway trains.">
     <meta property="og:image"
@@ -51,12 +51,18 @@
     </noscript>
     
     <div class="container main-content">
-        <h1><i class="fas fa-subway"></i> BR Train Seat Matrix <sup class="beta-badge">BETA</sup></h1>
+        <h1><i class="fas fa-subway"></i> BD Train</h1>
+        <p class="attribution">By Ishmam</p>
+        <p class="contact-link">
+            <i class="fas fa-user"></i> <strong>Contact:</strong> <a href="https://www.facebook.com/ishmamr.1" target="_blank" rel="noopener noreferrer"><i class="fab fa-facebook"></i></a>
+        </p>
 
         {% if CONFIG and CONFIG.queue_enabled %}
+        <!-- Temporarily hidden notice
         <p class="note bengali">
             <span class="note-bold highlight">লক্ষ্য করুনঃ </span> বর্তমানে আমাদের ওয়েবসাইটে অতিরিক্ত ব্যবহারকারীর চাপ রয়েছে। এজন্য আমরা একটি ধারাবাহিক অর্ডারে সেবা প্রদান করছি। ফলে আপনাকে বেশ কিছুটা সময় অপেক্ষা করতে হতে পারে এবং কখনো কখনো ফলাফল পুরোপুরি নির্ভুল নাও হতে পারে। যদি আপনি দ্রুত এবং আরও নির্ভুল ফলাফল পেতে চান, সেক্ষেত্রে নিচের গিটহাব লিংক থেকে প্রজেক্টের সোর্স কোড ডাউনলোড করে নিজস্ব কম্পিউটারে ব্যবহার করার অনুরোধ জানানো যাচ্ছে।
         </p><br>
+        -->
         {% endif %}
         
         {% if error %}
@@ -115,19 +121,6 @@
                 </button>
             </div>
         </form>
-        <footer class="new-footer">
-            <p>This project is open source. Check it out on <a
-                    href="https://github.com/nishatrhythm/Bangladesh-Railway-Train-Seat-Matrix-Web-Application"
-                    target="_blank">GitHub</a>.</p>
-        </footer>
-
-        <div class="footer-links">
-            <a href="https://trainseat.onrender.com" target="_blank">Seat Availability</a>
-            <span class="dot">•</span>
-            <a href="https://bdrailway.vercel.app" target="_blank">Train Fare</a>
-            <span class="dot">•</span>
-            <a href="https://forms.gle/NV72PC1z75sq77tg7" target="_blank">Feedback</a>
-        </div>
 
         {% if is_banner_enabled %}
         <div id="bannerModal" class="modal">
