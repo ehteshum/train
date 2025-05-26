@@ -4,10 +4,28 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import pytz
+import time
 
 SEAT_TYPES = [
     "S_CHAIR", "SHOVAN", "SNIGDHA", "F_SEAT", "F_CHAIR", "AC_S", "F_BERTH", "AC_B", "SHULOV", "AC_CHAIR"
 ]
+
+# Create a session for persistent connections
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'Origin': 'https://eticket.railway.gov.bd',
+    'Referer': 'https://eticket.railway.gov.bd/',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'cross-site',
+    'Pragma': 'no-cache',
+    'Cache-Control': 'no-cache'
+})
 
 def fetch_train_data(model: str, api_date: str) -> dict:
     url = "https://railspaapi.shohoz.com/v1.0/web/train-routes"
@@ -15,21 +33,34 @@ def fetch_train_data(model: str, api_date: str) -> dict:
         "model": model,
         "departure_date_time": api_date
     }
-    headers = {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Origin': 'https://eticket.railway.gov.bd',
-        'Referer': 'https://eticket.railway.gov.bd/'
-    }
-
+    
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response.json().get("data")
-    except requests.RequestException as e:
-        print(f"Error fetching train data: {str(e)}")
+        # Add retry logic
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = session.post(
+                    url,
+                    json=payload,
+                    timeout=30,
+                    verify=True
+                )
+                response.raise_for_status()
+                data = response.json().get("data")
+                if data:
+                    return data
+                time.sleep(retry_delay)
+            except requests.RequestException as e:
+                print(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(retry_delay)
+        
+        return None
+    except Exception as e:
+        print(f"Error in fetch_train_data: {str(e)}")
         return None
 
 def get_seat_availability(train_model: str, journey_date: str, from_city: str, to_city: str) -> tuple:
@@ -40,41 +71,51 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
         "date_of_journey": journey_date,
         "seat_class": "SHULOV"
     }
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Origin': 'https://eticket.railway.gov.bd',
-        'Referer': 'https://eticket.railway.gov.bd/'
-    }
-
+    
     try:
-        response = requests.get(url, params=params, headers=headers, timeout=30)
-        response.raise_for_status()
-        trains = response.json().get("data", {}).get("trains", [])
-
-        for train in trains:
-            if train.get("train_model") == train_model:
-                seat_info = {stype: {"online": 0, "offline": 0, "fare": 0, "vat_amount": 0} for stype in SEAT_TYPES}
-                for seat in train.get("seat_types", []):
-                    stype = seat["type"]
-                    if stype in seat_info:
-                        fare = float(seat["fare"])
-                        vat_amount = float(seat["vat_amount"])
-                        if stype in ["AC_B", "F_BERTH"]:
-                            fare += 50
-                        seat_info[stype] = {
-                            "online": seat["seat_counts"]["online"],
-                            "offline": seat["seat_counts"]["offline"],
-                            "fare": fare,
-                            "vat_amount": vat_amount
-                        }
-                return (from_city, to_city, seat_info)
-
+        # Add retry logic
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = session.get(
+                    url,
+                    params=params,
+                    timeout=30,
+                    verify=True
+                )
+                response.raise_for_status()
+                trains = response.json().get("data", {}).get("trains", [])
+                
+                for train in trains:
+                    if train.get("train_model") == train_model:
+                        seat_info = {stype: {"online": 0, "offline": 0, "fare": 0, "vat_amount": 0} for stype in SEAT_TYPES}
+                        for seat in train.get("seat_types", []):
+                            stype = seat["type"]
+                            if stype in seat_info:
+                                fare = float(seat["fare"])
+                                vat_amount = float(seat["vat_amount"])
+                                if stype in ["AC_B", "F_BERTH"]:
+                                    fare += 50
+                                seat_info[stype] = {
+                                    "online": seat["seat_counts"]["online"],
+                                    "offline": seat["seat_counts"]["offline"],
+                                    "fare": fare,
+                                    "vat_amount": vat_amount
+                                }
+                        return (from_city, to_city, seat_info)
+                
+                return (from_city, to_city, None)
+            except requests.RequestException as e:
+                print(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(retry_delay)
+        
         return (from_city, to_city, None)
-
-    except requests.RequestException as e:
-        print(f"Error getting seat availability: {str(e)}")
+    except Exception as e:
+        print(f"Error in get_seat_availability: {str(e)}")
         return (from_city, to_city, None)
 
 def compute_matrix(train_model, journey_date_str, api_date_format):
