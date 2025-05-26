@@ -2,6 +2,8 @@ import requests
 from datetime import datetime, timedelta
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+import pytz
 
 SEAT_TYPES = [
     "S_CHAIR", "SHOVAN", "SNIGDHA", "F_SEAT", "F_CHAIR", "AC_S", "F_BERTH", "AC_B", "SHULOV", "AC_CHAIR"
@@ -55,6 +57,57 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
 
     except requests.RequestException:
         return (from_city, to_city, None)
+
+def compute_matrix(train_model, journey_date_str, api_date_format):
+    try:
+        # Set a timeout for the request (10 seconds)
+        response = requests.get(
+            f'https://railspaapi.shohoz.com/v1.0/web/train-routes',
+            params={'train': train_model, 'date': api_date_format},
+            timeout=10,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'application/json',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Origin': 'https://eticket.railway.gov.bd',
+                'Referer': 'https://eticket.railway.gov.bd/'
+            }
+        )
+        
+        # Check if the request was successful
+        response.raise_for_status()
+        
+        # Parse the response
+        data = response.json()
+        
+        if not data or 'stations' not in data:
+            return {
+                'error': 'No data received from the API. Please try again later.',
+                'status': 'error'
+            }
+            
+        return data
+        
+    except requests.Timeout:
+        return {
+            'error': 'Request timed out. The server is taking too long to respond.',
+            'status': 'error'
+        }
+    except requests.RequestException as e:
+        return {
+            'error': f'Error connecting to the server: {str(e)}',
+            'status': 'error'
+        }
+    except json.JSONDecodeError:
+        return {
+            'error': 'Invalid response from the server.',
+            'status': 'error'
+        }
+    except Exception as e:
+        return {
+            'error': f'An unexpected error occurred: {str(e)}',
+            'status': 'error'
+        }
 
 def compute_matrix(train_model: str, journey_date_str: str, api_date_format: str) -> dict:
     train_data = fetch_train_data(train_model, api_date_format)
