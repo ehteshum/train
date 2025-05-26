@@ -3,7 +3,7 @@ services:
     name: bangladesh-railway-train-seat-matrix
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --timeout 120 --workers 2
+    startCommand: gunicorn app:app --timeout 300 --workers 4 --threads 2
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
@@ -14,8 +14,10 @@ services:
       - key: FLASK_APP
         value: app.py
       - key: GUNICORN_TIMEOUT
-        value: "120"
+        value: "300"
       - key: GUNICORN_WORKERS
+        value: "4"
+      - key: GUNICORN_THREADS
         value: "2"
       - key: HTTP_PROXY
         value: "http://proxy.render.com:3128"

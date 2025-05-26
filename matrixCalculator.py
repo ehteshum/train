@@ -41,26 +41,36 @@ session.headers.update({
 
 def make_request(method, url, **kwargs):
     """Make a request with retry logic and proxy support"""
-    max_retries = 3
-    retry_delay = 2
+    max_retries = 5  # Increased retries
+    base_delay = 3   # Increased base delay
     
     for attempt in range(max_retries):
         try:
+            # Add random delay between attempts
+            if attempt > 0:
+                delay = base_delay * (2 ** attempt) + random.uniform(1, 3)
+                logger.info(f"Waiting {delay:.2f} seconds before retry {attempt + 1}")
+                time.sleep(delay)
+            
             logger.info(f"Making {method} request to {url} (attempt {attempt + 1}/{max_retries})")
             response = session.request(method, url, **kwargs)
             
+            # Handle rate limiting
+            if response.status_code == 429:
+                logger.warning("Rate limited, waiting longer...")
+                time.sleep(10)  # Wait longer for rate limits
+                continue
+                
             if response.status_code == 200:
                 return response
                 
             logger.warning(f"Request failed with status {response.status_code}")
             if attempt < max_retries - 1:
-                time.sleep(retry_delay)
                 continue
                 
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {str(e)}")
             if attempt < max_retries - 1:
-                time.sleep(retry_delay)
                 continue
             raise
             
@@ -75,7 +85,7 @@ def fetch_train_data(model: str, api_date: str) -> dict:
     
     try:
         logger.info(f"Fetching train data for model: {model}, date: {api_date}")
-        response = make_request('POST', url, json=payload, timeout=30)
+        response = make_request('POST', url, json=payload, timeout=60)  # Increased timeout
         
         if not response:
             logger.error("Failed to get response after retries")
@@ -104,7 +114,7 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
     
     try:
         logger.info(f"Getting seat availability for train: {train_model}, from: {from_city}, to: {to_city}, date: {journey_date}")
-        response = make_request('GET', url, params=params, timeout=30)
+        response = make_request('GET', url, params=params, timeout=60)  # Increased timeout
         
         if not response:
             logger.error("Failed to get response after retries")
