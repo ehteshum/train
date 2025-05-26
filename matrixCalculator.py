@@ -6,6 +6,11 @@ import json
 import pytz
 import time
 import random
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 SEAT_TYPES = [
     "S_CHAIR", "SHOVAN", "SNIGDHA", "F_SEAT", "F_CHAIR", "AC_S", "F_BERTH", "AC_B", "SHULOV", "AC_CHAIR"
@@ -15,17 +20,10 @@ SEAT_TYPES = [
 session = requests.Session()
 session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json, text/plain, */*',
+    'Accept': 'application/json',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
     'Origin': 'https://eticket.railway.gov.bd',
-    'Referer': 'https://eticket.railway.gov.bd/',
-    'Sec-Fetch-Dest': 'empty',
-    'Sec-Fetch-Mode': 'cors',
-    'Sec-Fetch-Site': 'cross-site',
-    'Pragma': 'no-cache',
-    'Cache-Control': 'no-cache'
+    'Referer': 'https://eticket.railway.gov.bd/'
 })
 
 def fetch_train_data(model: str, api_date: str) -> dict:
@@ -36,44 +34,37 @@ def fetch_train_data(model: str, api_date: str) -> dict:
     }
     
     try:
-        # Add retry logic with exponential backoff
-        max_retries = 5
-        base_delay = 1  # seconds
+        logger.info(f"Fetching train data for model: {model}, date: {api_date}")
+        response = session.post(
+            url,
+            json=payload,
+            timeout=30
+        )
         
-        for attempt in range(max_retries):
-            try:
-                # Add a small random delay between retries
-                if attempt > 0:
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-                    time.sleep(delay)
-                
-                response = session.post(
-                    url,
-                    json=payload,
-                    timeout=30,
-                    verify=True
-                )
-                
-                # Check for rate limiting
-                if response.status_code == 429:
-                    print(f"Rate limited, waiting before retry...")
-                    time.sleep(5)  # Wait longer for rate limits
-                    continue
-                
-                response.raise_for_status()
-                data = response.json().get("data")
-                if data:
-                    return data
-                
-            except requests.RequestException as e:
-                print(f"Attempt {attempt + 1} failed: {str(e)}")
-                if attempt == max_retries - 1:
-                    raise
-                continue
+        logger.info(f"Response status code: {response.status_code}")
+        logger.info(f"Response headers: {dict(response.headers)}")
         
+        if response.status_code != 200:
+            logger.error(f"Error response: {response.text}")
+            return None
+            
+        data = response.json()
+        logger.info(f"Response data keys: {data.keys() if isinstance(data, dict) else 'Not a dict'}")
+        
+        return data.get("data")
+        
+    except requests.exceptions.Timeout:
+        logger.error("Request timed out")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request failed: {str(e)}")
+        return None
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON response: {str(e)}")
+        logger.error(f"Response content: {response.text}")
         return None
     except Exception as e:
-        print(f"Error in fetch_train_data: {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}")
         return None
 
 def get_seat_availability(train_model: str, journey_date: str, from_city: str, to_city: str) -> tuple:
@@ -86,62 +77,60 @@ def get_seat_availability(train_model: str, journey_date: str, from_city: str, t
     }
     
     try:
-        # Add retry logic with exponential backoff
-        max_retries = 5
-        base_delay = 1  # seconds
+        logger.info(f"Getting seat availability for train: {train_model}, from: {from_city}, to: {to_city}, date: {journey_date}")
+        response = session.get(
+            url,
+            params=params,
+            timeout=30
+        )
         
-        for attempt in range(max_retries):
-            try:
-                # Add a small random delay between retries
-                if attempt > 0:
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-                    time.sleep(delay)
-                
-                response = session.get(
-                    url,
-                    params=params,
-                    timeout=30,
-                    verify=True
-                )
-                
-                # Check for rate limiting
-                if response.status_code == 429:
-                    print(f"Rate limited, waiting before retry...")
-                    time.sleep(5)  # Wait longer for rate limits
-                    continue
-                
-                response.raise_for_status()
-                trains = response.json().get("data", {}).get("trains", [])
-                
-                for train in trains:
-                    if train.get("train_model") == train_model:
-                        seat_info = {stype: {"online": 0, "offline": 0, "fare": 0, "vat_amount": 0} for stype in SEAT_TYPES}
-                        for seat in train.get("seat_types", []):
-                            stype = seat["type"]
-                            if stype in seat_info:
-                                fare = float(seat["fare"])
-                                vat_amount = float(seat["vat_amount"])
-                                if stype in ["AC_B", "F_BERTH"]:
-                                    fare += 50
-                                seat_info[stype] = {
-                                    "online": seat["seat_counts"]["online"],
-                                    "offline": seat["seat_counts"]["offline"],
-                                    "fare": fare,
-                                    "vat_amount": vat_amount
-                                }
-                        return (from_city, to_city, seat_info)
-                
-                return (from_city, to_city, None)
-                
-            except requests.RequestException as e:
-                print(f"Attempt {attempt + 1} failed: {str(e)}")
-                if attempt == max_retries - 1:
-                    raise
-                continue
+        logger.info(f"Response status code: {response.status_code}")
+        logger.info(f"Response headers: {dict(response.headers)}")
         
+        if response.status_code != 200:
+            logger.error(f"Error response: {response.text}")
+            return (from_city, to_city, None)
+            
+        data = response.json()
+        logger.info(f"Response data keys: {data.keys() if isinstance(data, dict) else 'Not a dict'}")
+        
+        trains = data.get("data", {}).get("trains", [])
+        logger.info(f"Found {len(trains)} trains")
+        
+        for train in trains:
+            if train.get("train_model") == train_model:
+                seat_info = {stype: {"online": 0, "offline": 0, "fare": 0, "vat_amount": 0} for stype in SEAT_TYPES}
+                for seat in train.get("seat_types", []):
+                    stype = seat["type"]
+                    if stype in seat_info:
+                        fare = float(seat["fare"])
+                        vat_amount = float(seat["vat_amount"])
+                        if stype in ["AC_B", "F_BERTH"]:
+                            fare += 50
+                        seat_info[stype] = {
+                            "online": seat["seat_counts"]["online"],
+                            "offline": seat["seat_counts"]["offline"],
+                            "fare": fare,
+                            "vat_amount": vat_amount
+                        }
+                logger.info(f"Found seat info for train {train_model}")
+                return (from_city, to_city, seat_info)
+        
+        logger.info(f"No matching train found for model {train_model}")
+        return (from_city, to_city, None)
+        
+    except requests.exceptions.Timeout:
+        logger.error("Request timed out")
+        return (from_city, to_city, None)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request failed: {str(e)}")
+        return (from_city, to_city, None)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON response: {str(e)}")
+        logger.error(f"Response content: {response.text}")
         return (from_city, to_city, None)
     except Exception as e:
-        print(f"Error in get_seat_availability: {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}")
         return (from_city, to_city, None)
 
 def compute_matrix(train_model, journey_date_str, api_date_format):
